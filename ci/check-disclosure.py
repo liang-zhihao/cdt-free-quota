@@ -135,6 +135,10 @@ IP_ALLOW = [
     re.compile(r"^169\.254\."),               # 链路本地
     re.compile(r"^198\.51\.100\."), re.compile(r"^203\.0\.113\."),  # RFC 5737 文档示例
     re.compile(r"^1\.2\.3\.4$"),              # 惯例上的「随便一个 IP」，非真实地址
+    # 公共 DNS 引导地址，精确到单个 IP：
+    # https://www.alibabacloud.com/help/en/dns/free-service-disclaimer
+    # https://docs.dnspod.com/public-dns/public-dns-guide/
+    re.compile(r"^223\.5\.5\.5$"), re.compile(r"^119\.29\.29\.29$"),
 ]
 
 # 这些路径/后缀不参与检查。

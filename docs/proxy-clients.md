@@ -128,7 +128,24 @@ curl --proxy http://127.0.0.1:17890 --fail --max-time 30 -o /dev/null \
 
 第二项会消耗约 20 MB 下载流量。比较旧协议和新协议时，使用相同网络、URL、文件大小和次数，只比较完整下载；超时或未达到目标字节数单独记录，不当作有效速度。测速后在客户端终端按 Ctrl+C 结束。换算：MB/s = 字节每秒 ÷ 1,000,000，Mbps = MB/s × 8。
 
-Clash Meta for Android：配置 → 新增 → 从文件导入 `clash.yaml` → 启用 → 选择 对应地域的 `HongKong-HY2` 或 `Singapore-HY2`。配置默认私有 IPv4 网段直连，其余流量进入该节点；DNS 使用通过节点访问的公共 DoH。需要保留原有节点时，在应用中保留旧配置，便于切回。
+Clash Meta for Android：配置 → 新增 → 从文件导入 `clash.yaml` → 启用 → 选择对应地域的 `HongKong-HY2` 或 `Singapore-HY2`。使用「规则」模式启用下面的分流；需要保留原有节点时，在应用中保留旧配置，便于切回。
+
+### 中国大陆分流
+
+Clash 默认按以下顺序匹配，首个命中即生效：
+
+1. 本机、局域网与链路本地地址直连，包含 IPv4 和 IPv6。
+2. 大陆域名集合 `cn_domain` 命中时直连。
+3. 大陆 IP 集合 `cn_ip` 命中时直连；允许解析域名，补充域名集合未覆盖的目标。
+4. 其余流量进入 `PROXY` 选中的香港／新加坡节点。
+
+规则来自 [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) 的 `geo/geosite/cn.mrs` 和 `geo/geoip/cn.mrs`。客户端通过 `PROXY` 下载，每 24 小时检查更新，分别缓存在客户端配置目录的 `rules/cn_domain.mrs` 与 `rules/cn_ip.mrs`。规则集合可能遗漏或误分类，命中大陆规则不等于运营商链路或服务归属一定在大陆。
+
+DNS 保留 fake-ip：大陆域名通过阿里 DNS DoH 直连解析，其他域名通过代理访问 Cloudflare DoH；直连出口也使用阿里 DNS。`223.5.5.5` 和 `119.29.29.29` 仅作为解析 DNS 服务域名的引导解析器。字段依据 [Mihomo DNS 文档](https://wiki.metacubex.one/config/dns/)；Mac 的 `mac-client.json` 继续将请求交给 Hysteria2，不采用这套 Clash 分流。
+
+首次启用需等待两个规则集加载成功，可在客户端规则提供者信息或日志中确认规则数量非零，再检查国内目标命中 `cn_domain` / `cn_ip`、海外目标命中 `MATCH`。国内网站仍绕行时，先检查应用处于「规则」模式、规则集加载状态和实际命中记录，再判断是否为规则遗漏。
+
+Mihomo 1.19.32 的故障测试表明：更新请求失败后仍使用已有规则，重启也可读取缓存；首次下载失败且没有缓存时，内核仍能启动，但大陆规则数量为零，相关流量可能落到 `MATCH,PROXY`。因此「客户端启动成功」不能替代分流验收。恢复节点连接后手动更新两个规则集，再检查规则数量及命中情况；首次下载依赖可用代理节点。
 
 ## 固定 HTTPS 订阅
 
@@ -174,6 +191,8 @@ python3 scripts/subscription.py publish --deployment deployment.local.json \
 
 以后对同一个 `--state` 文件重复运行 `publish`，即更新同一个 URL。上传中断后重试仍复用已保存的对象路径。手机执行“更新配置”后生效。只校验时把 `publish` 换成 `check`。
 
+已有订阅启用大陆分流时，先用更新后的生成器输出到新目录，检查 `clash.yaml` 后按相同 `--state` 重新发布；手机更新订阅并确认两个规则集已加载。此后大陆域名／IP 数据由客户端定期更新，无需为了规则数据更新重新发布订阅。主配置更新与规则数据更新是两个独立步骤。
+
 撤销下载访问：
 
 ```sh
@@ -194,7 +213,7 @@ SING_BOX=/absolute/path/to/sing-box MIHOMO=/absolute/path/to/mihomo \
   python3 -m unittest discover -s tests -v
 ```
 
-测试生成临时证书，在本机启动服务端与两种客户端，检查实际请求、证书错误拒绝、原有入口保留、端口冲突和文件权限，结束后关闭测试进程。未设置内核路径时会明确跳过运行时测试。该测试证明配置与对应内核兼容，不代表手机实机或任意运营商线路已验证。
+测试生成临时证书，在本机启动服务端与两种客户端，检查实际请求、证书错误拒绝、原有入口保留、端口冲突和文件权限。分流用例保留生成的规则顺序和 DNS 策略，以本机 MRS 数据、HTTP 代理和 UDP DNS 替换外部服务，验证域名直连、IP 兜底、其余代理、DNS 查询去向及规则缓存故障行为；该用例不验证公网 DoH 连通性。结束后关闭测试进程。未设置内核路径时会明确跳过运行时测试。该测试证明配置与对应内核兼容，不代表手机实机或任意运营商线路已验证。
 
 字段依据：[sing-box Hysteria2 服务端](https://sing-box.sagernet.org/configuration/inbound/hysteria2/)、[sing-box Hysteria2 客户端](https://sing-box.sagernet.org/configuration/outbound/hysteria2/)、[Mihomo Hysteria2](https://wiki.metacubex.one/config/proxies/hysteria2/)。
 

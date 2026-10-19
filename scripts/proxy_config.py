@@ -70,11 +70,27 @@ def generate(config_path, output_dir, server_config=None, deployment=None):
     node = {"name": label + "-HY2", "type": "hysteria2", "server": config["server"], "port": config["port"],
             "password": password, "up": str(config["up_mbps"]) + " Mbps", "down": str(config["down_mbps"]) + " Mbps",
             "sni": config["server_name"], "skip-cert-verify": False, "fingerprint": fingerprint, "alpn": ["h3"]}
+    domestic_dns = ["https://dns.alidns.com/dns-query#DIRECT"]
+    rule_base = "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/"
+    providers = {
+        name: {"type": "http", "behavior": behavior, "format": "mrs", "proxy": "PROXY",
+               "path": "./rules/" + name + ".mrs", "url": rule_base + location + "/cn.mrs",
+               "interval": 86400}
+        for name, behavior, location in (("cn_domain", "domain", "geosite"), ("cn_ip", "ipcidr", "geoip"))
+    }
     clash = {"mixed-port": 7890, "allow-lan": False, "mode": "rule", "log-level": "warning",
-             "dns": {"enable": True, "enhanced-mode": "fake-ip", "nameserver": ["https://cloudflare-dns.com/dns-query#PROXY"]},
+             "dns": {"enable": True, "enhanced-mode": "fake-ip",
+                     "default-nameserver": ["223.5.5.5", "119.29.29.29"],
+                     "nameserver-policy": {"rule-set:cn_domain": domestic_dns},
+                     "direct-nameserver": domestic_dns,
+                     "nameserver": ["https://cloudflare-dns.com/dns-query#PROXY"]},
              "proxies": [node], "proxy-groups": [{"name": "PROXY", "type": "select", "proxies": [node["name"]]}],
+             "rule-providers": providers,
              "rules": ["IP-CIDR,127.0.0.0/8,DIRECT,no-resolve", "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
-                       "IP-CIDR,172.16.0.0/12,DIRECT,no-resolve", "IP-CIDR,192.168.0.0/16,DIRECT,no-resolve", "MATCH,PROXY"]}
+                       "IP-CIDR,172.16.0.0/12,DIRECT,no-resolve", "IP-CIDR,192.168.0.0/16,DIRECT,no-resolve",
+                       "IP-CIDR,169.254.0.0/16,DIRECT,no-resolve", "IP-CIDR6,::1/128,DIRECT,no-resolve",
+                       "IP-CIDR6,fc00::/7,DIRECT,no-resolve", "IP-CIDR6,fe80::/10,DIRECT,no-resolve",
+                       "RULE-SET,cn_domain,DIRECT", "RULE-SET,cn_ip,DIRECT", "MATCH,PROXY"]}
     if config.get("vless_client_file"):
         existing_client = json.loads((config_path.parent / config["vless_client_file"]).read_text(encoding="utf-8"))
         candidates = [o for o in existing_client.get("outbounds", []) if o.get("type") == "vless"]

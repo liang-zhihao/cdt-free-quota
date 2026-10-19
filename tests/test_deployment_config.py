@@ -33,6 +33,14 @@ class DeploymentTests(unittest.TestCase):
     def save(self):
         self.path.write_text(json.dumps(self.config))
 
+    def test_public_dns_allowlist_is_exact(self):
+        allowed = runpy.run_path(str(ROOT / 'ci/check-disclosure.py'))['IP_ALLOW']
+        for address in ('223.5.5.5', '119.29.29.29'):
+            self.assertTrue(any(pattern.match(address) for pattern in allowed))
+            octets = address.split('.')
+            octets[-1] = str(int(octets[-1]) + 1)
+            self.assertFalse(any(pattern.match('.'.join(octets)) for pattern in allowed))
+
     def test_regions_and_existing_state_reader(self):
         for region, zone in (("cn-hongkong", "cn-hongkong-c"),
                              ("ap-southeast-1", "ap-southeast-1d")):
