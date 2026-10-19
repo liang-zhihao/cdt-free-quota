@@ -152,7 +152,7 @@ _ins = (rpc("DescribeInstances", "2014-05-26",
 if not _ins:
     print("⚠ 查不到实例 %s —— 无法做调用校验（ID 过期？地域填错？）" % IID)
     print("  跳过校验，避免触发 StartInstance 副作用。")
-    sys.exit(0)
+    sys.exit(0 if args.allow_unverified else 1)
 st = _ins[0].get("Status")
 print("实例当前状态: %s" % st)
 # ⚠️⚠️ 实例不是 Running 时**不能悄悄 exit 0** —— 那等于「部署校验通过」但实际

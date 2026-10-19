@@ -86,7 +86,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("未上传", result.stderr)
 
-    def run_fc(self, extra, configured=True):
+    def run_fc(self, extra, configured=True, instance_found=True, expected_exit=0):
         captured = {}
         existing = dict(ALIYUN_AK="fixture-access", ALIYUN_SK="fixture-secret", EXTRA="keep",
                         ECS_INSTANCE_ID="old-instance", OSS_BUCKET="old-bucket", PUSH_TOKEN="old-token",
@@ -131,7 +131,8 @@ class DeploymentTests(unittest.TestCase):
         argv += extra
         credentials = dict(ALIYUN_AK="fixture-access", ALIYUN_SK="fixture-secret", ALIYUN_UID="example",
                            ECS_INSTANCE_ID="old-instance", REGION_ID="cn-hongkong")
-        response = io.BytesIO(json.dumps({"Instances": {"Instance": [{"Status": "Running"}]}}).encode())
+        instances = [{"Status": "Running"}] if instance_found else []
+        response = io.BytesIO(json.dumps({"Instances": {"Instance": instances}}).encode())
         output = io.StringIO()
         with mock.patch.dict(sys.modules, modules), mock.patch.dict(os.environ, credentials, clear=True), \
                 mock.patch.object(sys, "argv", argv), mock.patch("time.sleep"), \
@@ -140,7 +141,7 @@ class DeploymentTests(unittest.TestCase):
                 contextlib.redirect_stdout(output):
             with self.assertRaises(SystemExit) as exit_result:
                 runpy.run_path(argv[0], run_name="__main__")
-            self.assertEqual(exit_result.exception.code, 0, output.getvalue())
+            self.assertEqual(exit_result.exception.code, expected_exit, output.getvalue())
             captured["verify"] = verify.call_args
         self.assertNotIn(self.config["PUSH_TOKEN"], output.getvalue())
         return captured
@@ -165,6 +166,12 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(result["endpoint"], "example.cn-hongkong.fc.aliyuncs.com")
         self.assertEqual(result["updated"]["ECS_INSTANCE_ID"], "old-instance")
         self.assertNotIn("OSS_ENDPOINT", result["updated"])
+
+    def test_fc_missing_target_is_not_verified(self):
+        result = self.run_fc([], instance_found=False, expected_exit=1)
+        self.assertNotIn("invoked", result)
+        result = self.run_fc(["--allow-unverified"], instance_found=False)
+        self.assertNotIn("invoked", result)
 
     def test_name_checker_exports_and_uncalled_guard(self):
         checker = str(ROOT / "ci/check-names.py")
