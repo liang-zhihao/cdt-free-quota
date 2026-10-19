@@ -173,6 +173,18 @@ class DeploymentTests(unittest.TestCase):
         result = self.run_fc(["--allow-unverified"], instance_found=False)
         self.assertNotIn("invoked", result)
 
+    def test_eventbridge_example_expands_region(self):
+        text = (ROOT / "scripts/provision/README.md").read_text()
+        start = text.index('aliyun fc CreateTrigger', text.index('# eventbridge 型'))
+        command = text[start:text.index('```', start)]
+        for region in ("cn-hongkong", "ap-southeast-1"):
+            shell = "aliyun() { while [ \"$1\" != --body ]; do shift; done; shift; printf '%s' \"$1\"; }\n" + command
+            result = subprocess.run(["sh"], input=shell, text=True, capture_output=True,
+                                    env=dict(os.environ, REGION=region, ACCOUNT_UID="example"))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            body = json.loads(result.stdout)
+            self.assertEqual(body["sourceArn"], "acs:eventbridge:" + region + ":example:eventbus/default")
+
     def test_name_checker_exports_and_uncalled_guard(self):
         checker = str(ROOT / "ci/check-names.py")
         module = Path(self.tmp.name) / "module.py"

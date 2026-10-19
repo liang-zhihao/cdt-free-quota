@@ -36,7 +36,7 @@ description: 在阿里云中国站部署一套「拿满 CDT 每月 220 GB 免费
 | 账号站点 | 让用户确认 | **中国站**（`aliyun.com`），不是国际站 |
 | 实名认证 | 让用户确认 | 已完成（个人认证需身份证） |
 | 账户余额 | BssOpenApi `QueryAccountBalance` | **可用余额 ≥ ¥100** —— 这是**持续**门槛不是入场费。⚠️ 该数值来自**控制台拦截提示**，帮助文档里没有这项门槛（详见 [`README.md`](README.md) 前置条件表） |
-| 地域可用区 | ECS `DescribeZones` | 香港只有 `cn-hongkong-b/-c/-d`，**没有 `-a`** |
+| 地域可用区 | ECS `DescribeZones` | 查询所选地域；香港形如 `cn-hongkong-c`，新加坡形如 `ap-southeast-1d`，以返回的可用区和库存为准 |
 | 计费现状 | CDT 是否已升级为 CDT 计费 | 若未升级，**需要人工走控制台**（见第 2 步） |
 
 > ⚠️ **`QueryAccountBalance` 不是 `DescribeAccountBalance`** —— 后者不存在。
@@ -65,6 +65,10 @@ description: 在阿里云中国站部署一套「拿满 CDT 每月 220 GB 免费
 ---
 
 ## 二、动线
+
+### 香港 / 新加坡、Clash 与订阅入口
+
+用户要求香港或新加坡部署、Hysteria2、Clash 导入或订阅链接时，先读 [`docs/deployment-guide.md`](docs/deployment-guide.md)，按资源准备、守护、FC、代理、客户端、订阅、验收的顺序执行。地域与实例信息以 `deployment.local.json` 为准。生成凭据、部署服务、开放端口和公开订阅应分别在用户授权范围内执行；使用占位符示例，真实配置与订阅记录保存在被忽略的私密目录。速度结论以同网络、完整下载对比为准。
 
 ### 第 1 步：资源创建
 
@@ -512,7 +516,7 @@ rm -f /root/cdtguard.drill.py /root/drill.out /tmp/cdtguard.drill.state /tmp/cdt
 - [`docs/billing.md`](docs/billing.md) —— 220 GB 怎么分、怎么算，含 CDT 2.0 的账单字段变更
 - [`docs/pitfalls.md`](docs/pitfalls.md) —— 29 条踩坑清单，每条附证据等级
 - [`docs/proxy-interface.md`](docs/proxy-interface.md) —— 代理侧必须遵守的三条硬约定
-  （**agent 不要照它去搭代理** —— 它只写「守护对代理有什么要求」）
+  ；完整部署、客户端和订阅流程见 [`docs/deployment-guide.md`](docs/deployment-guide.md)
 - [`docs/toolchain.md`](docs/toolchain.md) —— 本教程用到的工具与 MCP 服务：
   地址、装法、最小用法，以及**哪些是必需的、哪些可省**
 - [`policies/`](policies/) —— 运行时 RAM 策略（最小权限 + 显式 Deny）

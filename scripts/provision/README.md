@@ -19,7 +19,7 @@
 
 | 变量 | 从哪来 | 备注 |
 |---|---|---|
-| `REGION` / `ZONE` | `aliyun ecs DescribeZones --RegionId cn-hongkong` | `.env.example` 里叫 `REGION_ID`；`--config` 路径自动填充地域端点，手工路径需同步修改 `cdtguard.py` 的 `BW_EP`/`OSS_EP`/`ZONE` |
+| `REGION` / `ZONE` | `aliyun ecs DescribeZones --RegionId "$REGION"` | `.env.example` 里叫 `REGION_ID`；`--config` 路径自动填充地域端点，手工路径需同步修改 `cdtguard.py` 的 `BW_EP`/`OSS_EP`/`ZONE` |
 | `ACCOUNT_UID` | 控制台「账号管理 → 安全设置」，或 `aliyun sts GetCallerIdentity` | `.env.example` 里叫 `ALIYUN_UID` |
 | `VPC_ID` | §4.1 `CreateVpc` 的返回 | 用 `grep -o '"VpcId":"[^"]*"'` 回读 |
 | `VSWITCH_ID` | §4.2 `CreateVSwitch` 的返回 | 同理回读 |
@@ -147,7 +147,7 @@ aliyun ram AttachPolicyToRole --PolicyType Custom \
 >
 > ```json
 > { "Effect": "Allow", "Action": ["ecs:StopInstance"],
->   "Resource": "acs:ecs:cn-hongkong:<YOUR_ACCOUNT_UID>:instance/<YOUR_INSTANCE_ID>" }
+>   "Resource": "acs:ecs:<YOUR_REGION_ID>:<YOUR_ACCOUNT_UID>:instance/<YOUR_INSTANCE_ID>" }
 > ```
 >
 > ⚠️ 同理，`ecs:TagResources` / `ecs:UntagResources` 也是 `*`。
@@ -217,7 +217,8 @@ SG=$(aliyun ecs CreateSecurityGroup --RegionId "$REGION" --VpcId "$VPC_ID" \
        --SecurityGroupName cdt-sg \
        --Tag.1.Key cdt-role --Tag.1.Value guard | grep -o '"SecurityGroupId":"[^"]*"' | cut -d'"' -f4)
 
-# ⚠️ 只放你真正需要的端口。本方案的代理入口是 443（REALITY）。
+# 根据协议开放入口：VLESS/REALITY 使用 TCP，Hysteria2 使用 UDP。
+# UDP 规则与部署见 ../../docs/deployment-guide.md。
 #    不要把 22 开给 0.0.0.0/0 —— 用你的固定出口 IP 或走跳板。
 aliyun ecs AuthorizeSecurityGroup --RegionId "$REGION" --SecurityGroupId "$SG" \
   --IpProtocol tcp --PortRange 443/443 --SourceCidrIp 0.0.0.0/0 --Description proxy
@@ -395,10 +396,10 @@ aliyun fc CreateFunction   --endpoint "$ACCOUNT_UID.$REGION.fc.aliyuncs.com"   -
     "code": {"ossBucketName": "<YOUR_OSS_BUCKET>", "ossObjectName": "fc/index.zip"},
     "environmentVariables": {
       "ALIYUN_AK": "<YOUR_AK_ID>", "ALIYUN_SK": "<YOUR_AK_SECRET>",
-      "REGION_ID": "cn-hongkong", "ECS_INSTANCE_ID": "<YOUR_INSTANCE_ID>",
+      "REGION_ID": "<YOUR_REGION_ID>", "ECS_INSTANCE_ID": "<YOUR_INSTANCE_ID>",
       "ECS_NAME": "<YOUR_INSTANCE_NAME>", "EIP": "<YOUR_EIP>",
-      "ZONE": "cn-hongkong-c", "TRAFFIC_THRESHOLD_GB": "200",
-      "OSS_BUCKET": "<YOUR_OSS_BUCKET>", "OSS_ENDPOINT": "oss-cn-hongkong.aliyuncs.com",
+      "ZONE": "<YOUR_ZONE>", "TRAFFIC_THRESHOLD_GB": "200",
+      "OSS_BUCKET": "<YOUR_OSS_BUCKET>", "OSS_ENDPOINT": "<YOUR_OSS_ENDPOINT>",
       "PUSH_TOKEN": "<YOUR_PUSHPLUS_TOKEN>"
     }
   }'
@@ -445,7 +446,7 @@ aliyun fc CreateFunction   --endpoint "$ACCOUNT_UID.$REGION.fc.aliyuncs.com"   -
 
 | 判据 | 怎么取 | 可信度 |
 |---|---|---|
-| ① 函数元数据 | `aliyun fc GET /2023-03-30/functions/cdt-keeper --region cn-hongkong` | 低 —— `codeSize` 是 **zip 后**大小，不是源文件大小 |
+| ① 函数元数据 | `aliyun fc GET /2023-03-30/functions/cdt-keeper --region "$REGION"` | 低 —— `codeSize` 是 **zip 后**大小，不是源文件大小 |
 | ② 拉部署包比指纹 | 见下 | 中 —— 能证明「字节一致」，但**注释改一行就变** |
 | ③ **运行时自报 `VER`** | `deploy-fc.py` 自动做；手工见下 | **高** —— 来自实际执行的那份代码 |
 
@@ -457,7 +458,7 @@ aliyun fc CreateFunction   --endpoint "$ACCOUNT_UID.$REGION.fc.aliyuncs.com"   -
 
 ```sh
 # 1) 拿到一个预签名 URL（响应里的 url 字段）
-aliyun fc GET /2023-03-30/functions/cdt-keeper/code --region cn-hongkong
+aliyun fc GET /2023-03-30/functions/cdt-keeper/code --region "$REGION"
 # 2) 拉下来解开
 curl -sL -o /tmp/fc.zip '<上一步的 url>'
 unzip -o /tmp/fc.zip -d /tmp/fc && sha256sum /tmp/fc/index.js
@@ -591,7 +592,7 @@ aliyun fc CreateTrigger --endpoint "$ACCOUNT_UID.$REGION.fc.aliyuncs.com"   --me
 # eventbridge 型（依赖 §5.2 的规则先建好）
 # ⚠️ `sourceArn` 是 **CreateTriggerInput 的顶层字段**，不在 `triggerConfig` 里。
 aliyun fc CreateTrigger --endpoint "$ACCOUNT_UID.$REGION.fc.aliyuncs.com"   --method POST --force --functionName cdt-keeper   --body '{"triggerName":"ecs-statechange","triggerType":"eventbridge",
-           "sourceArn":"acs:eventbridge:$REGION:$ACCOUNT_UID:eventbus/default",
+           "sourceArn":"acs:eventbridge:'"$REGION"':'"$ACCOUNT_UID"':eventbus/default",
            "triggerConfig":"{\"triggerEnable\":true}"}'
 ```
 

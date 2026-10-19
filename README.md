@@ -2,6 +2,11 @@
 
 **把阿里云 CDT 的免费公网流量额度用满，并且用守护机制把超出量限制在可控范围内。**
 
+
+**[从这里开始：香港 / 新加坡部署、Clash 与订阅](docs/deployment-guide.md)**
+
+可选择香港或新加坡，沿同一流程完成资源、CDT 守护、FC、Hysteria2、Mac / Clash 配置和固定 HTTPS 订阅。已有 VLESS 入口可保留；速率和网卡设置可调，并通过完整下载对比选择合适的配置。
+
 > ⚠️ 额度是**两个池子**：中国内地 20 GB + 非中国内地 200 GB，合起来 220 GB。
 > 它们是**分开**的 —— 单台机器只能吃**它所在地域所属的那个池子**。所以「用满 220 GB」
 > 要靠两台机器，本方案部署一台，目标是**用满所属池子的那份**（非内地 200 GB 或内地 20 GB）。
@@ -71,7 +76,10 @@
 │   ├── fc-keeper/index.js    ← 函数计算兜底：实例被意外停机时拉起
 │   ├── deploy-cdtguard.sh    ← 把守护部署进 ECS
 │   ├── deploy-fc.py          ← 部署 FC 代码（含 env 合并与部署后校验）
-│   ├── deployment_config.py  ← 两个部署入口共用的配置读取模块
+│   ├── deployment_config.py  ← 部署入口共用的配置读取模块
+│   ├── proxy_config.py       ← 从同一地域配置生成服务端、Mac 与 Clash 配置
+│   ├── subscription.py       ← 发布、更新、验证与撤销固定 HTTPS 订阅
+│   ├── sing-box.initd        ← 代理的 OpenRC 服务定义
 │   ├── build-image.sh        ← 自建 1 GB Alpine 磁盘镜像（公共镜像都 ≥20 GB）
 │   ├── import-image.sh       ← 上传 OSS 并导入为 ECS 自定义镜像
 │   ├── provision/            ← 资源创建：模式、依赖顺序、一个完整示例
@@ -83,8 +91,8 @@
 ├── docs/
 │   ├── billing.md            ← 220 GB 怎么分、怎么算，含 CDT 2.0 的字段变更
 │   ├── pitfalls.md           ← 踩坑清单（每条附证据等级）
-│   ├── proxy-interface.md    ← 代理侧要遵守的三条硬约定（**不含搭建教程**）
-│   ├── singbox-notes.md      ← sing-box 的通用知识与踩坑（**不含分流设计**）
+│   ├── proxy-interface.md    ← 代理侧要遵守的三条硬约定
+│   ├── singbox-notes.md      ← sing-box 的通用知识与踩坑
 │   ├── toolchain.md          ← 本教程用到的工具与 MCP 服务：地址、装法、必需/可选
 │   └── pre-commit-checklist.md ← **发布前检查清单**（形状检查 + 必须人读的语义清单）
 └── console/
@@ -258,6 +266,8 @@ sh ci/assert-policies.sh
 ⚠️ 该许可只覆盖软件本身，**不构成对「违反阿里云服务条款使用云服务」的授权** ——
 见 [`DISCLAIMER.md`](DISCLAIMER.md) 第六节。
 
-## 新加坡部署
+## 部署入口
 
-香港与新加坡均可通过现有部署命令的 `--config` 参数读取同一份 JSON 配置，自动配置守护与 FC 的地域、端点和资源信息。步骤、示例与验收见 [新加坡部署配置](docs/singapore-deployment.md)。
+- [完整部署流程](docs/deployment-guide.md)：地域选择、资源创建与验收顺序。
+- [地域配置](docs/singapore-deployment.md)：原有守护与 FC 命令的 `--config` 用法。
+- [代理与客户端](docs/proxy-clients.md)：Hysteria2、Mac、Clash、固定订阅、测速及回滚。

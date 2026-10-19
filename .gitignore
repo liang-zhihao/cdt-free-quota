@@ -46,3 +46,8 @@ openspec/
 # 部署者填写的配置与本地生成结果
 /deployment.local.json
 /deployment-output/
+
+/proxy.local.json
+/hy2-password.txt
+/server-current.json
+/vless-client.local.json

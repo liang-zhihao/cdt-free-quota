@@ -1,0 +1,10 @@
+{
+  "server_name": "proxy.example.com",
+  "password_file": "./hy2-password.txt",
+  "certificate_file": "./hy2-cert.pem",
+  "port": 443,
+  "up_mbps": 20,
+  "down_mbps": 100,
+  "mac_port": 17890,
+  "mac_interface": ""
+}
