@@ -57,6 +57,13 @@ def report_unused(tree, path, ignore=()):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             defined[node.name] = node.lineno
     used = set()
+    # 共享模块通过 __all__ 声明供其他部署入口调用的函数。
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets):
+            if isinstance(node.value, (ast.List, ast.Tuple)):
+                used.update(item.value for item in node.value.elts
+                            if isinstance(item, ast.Constant) and isinstance(item.value, str))
     for node in ast.walk(tree):
         if isinstance(node, ast.Name):
             used.add(node.id)

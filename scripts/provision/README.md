@@ -1,5 +1,7 @@
 # 资源创建：依赖顺序与逐步命令
 
+香港 / 新加坡可配合现有部署脚本的 `--config` 参数使用统一配置，见 [新加坡部署配置](../../docs/singapore-deployment.md)。本文中的香港字面量是手工路径示例；新加坡部署应使用同地域资源。
+
 > ⚠️ **先读这一条**：本文件给出的是**依赖顺序**与**每步要跑的命令**。
 > 标 **【未实测】** 的命令是**按官方 API 定义写的、没有逐条在干净账号上跑过**
 > —— 因为它们大多是**创建操作**，跑一遍就是真花钱。
@@ -17,7 +19,7 @@
 
 | 变量 | 从哪来 | 备注 |
 |---|---|---|
-| `REGION` / `ZONE` | `aliyun ecs DescribeZones --RegionId cn-hongkong` | `.env.example` 里叫 `REGION_ID`；本方案端点**写死香港**，换地域要改 `cdtguard.py` 的 `BW_EP`/`OSS_EP`/`ZONE` |
+| `REGION` / `ZONE` | `aliyun ecs DescribeZones --RegionId cn-hongkong` | `.env.example` 里叫 `REGION_ID`；`--config` 路径自动填充地域端点，手工路径需同步修改 `cdtguard.py` 的 `BW_EP`/`OSS_EP`/`ZONE` |
 | `ACCOUNT_UID` | 控制台「账号管理 → 安全设置」，或 `aliyun sts GetCallerIdentity` | `.env.example` 里叫 `ALIYUN_UID` |
 | `VPC_ID` | §4.1 `CreateVpc` 的返回 | 用 `grep -o '"VpcId":"[^"]*"'` 回读 |
 | `VSWITCH_ID` | §4.2 `CreateVSwitch` 的返回 | 同理回读 |

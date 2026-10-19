@@ -1,5 +1,5 @@
 # 部署 cdt-keeper 到函数计算 FC 3.0。
-#   用法: python3 deploy-fc.py <index.js 路径> [--dry] [--allow-unverified]
+#   用法: python3 deploy-fc.py <index.js 路径> [--config JSON] [--dry] [--allow-unverified]
 #
 # 为什么需要这个脚本（而不是控制台点一下或直接调 UpdateFunction）：
 #
@@ -16,8 +16,23 @@
 #
 # 凭据：从环境变量读（ALIYUN_AK / ALIYUN_SK / ALIYUN_UID / ECS_INSTANCE_ID）。
 #       这是**部署期**身份，权限可以比运行时角色宽 —— 用完即摘。
-import base64, hashlib, io, json, os, re, sys, time, zipfile
+import argparse, base64, hashlib, io, json, os, re, sys, time, zipfile
 import urllib.request
+from deployment_config import load_config, fc_environment
+
+parser = argparse.ArgumentParser(description="更新现有 FC 函数并回读验收")
+parser.add_argument("source", help="index.js 路径")
+parser.add_argument("--config", help="与 deploy-cdtguard.sh 共用的部署 JSON")
+parser.add_argument("--dry", action="store_true", help="只查询、校验，不更新或调用函数")
+parser.add_argument("--allow-unverified", action="store_true")
+args = parser.parse_args()
+deployment = None
+if args.config:
+    try:
+        deployment = load_config(args.config)
+    except (ValueError, OSError):
+        sys.exit("配置读取失败：请检查 JSON 必填项、地域和阈值")
+
 from alibabacloud_fc20230330.client import Client
 from alibabacloud_tea_openapi import models as oa
 from alibabacloud_fc20230330 import models as fc
@@ -33,18 +48,16 @@ def require_env(name):
 AK = require_env("ALIYUN_AK")
 SK = require_env("ALIYUN_SK")
 UID = require_env("ALIYUN_UID")
-IID = require_env("ECS_INSTANCE_ID")
-REGION = os.environ.get("REGION_ID", "cn-hongkong")
+IID = deployment["ECS_INSTANCE_ID"] if deployment else require_env("ECS_INSTANCE_ID")
+REGION = deployment["REGION_ID"] if deployment else os.environ.get("REGION_ID", "cn-hongkong")
 FN = os.environ.get("FC_FUNCTION_NAME", "cdt-keeper")
 
 # env 复核只检查这几个「缺了会静默断链」的键。不写死全部键名 ——
 # 其余键原样合并即可，清单写死反而会在别人改了函数后误报。
 REQUIRED_ENV = ["ALIYUN_AK", "ALIYUN_SK", "ECS_INSTANCE_ID", "OSS_BUCKET", "PUSH_TOKEN", "REGION_ID"]
 
-if len(sys.argv) < 2:
-    sys.exit("用法: python3 deploy-fc.py <index.js 路径> [--dry] [--allow-unverified]")
-js_path = sys.argv[1]
-dry = "--dry" in sys.argv
+js_path = args.source
+dry = args.dry
 src = open(js_path, "rb").read()
 m = re.search("const VER = '([^']+)'", src.decode())
 if not m:
@@ -60,6 +73,9 @@ c = Client(oa.Config(access_key_id=AK, access_key_secret=SK,
 cur = c.get_function(FN, fc.GetFunctionRequest()).body
 env = dict(cur.environment_variables or {})
 print("读回现有 env: %d 个键" % len(env))
+if deployment:
+    env.update(fc_environment(deployment))
+    print("已合并部署配置；其他环境变量保留")
 missing = [k for k in REQUIRED_ENV if not env.get(k)]
 if missing:
     print("✖ 缺少必需环境变量: %s —— 中止（写回会打断链路）" % missing)
@@ -83,7 +99,7 @@ if dry:
 # ── 3) UpdateFunction（env 原样合并）────────────────────────────────
 inp = fc.UpdateFunctionInput(
     code=fc.InputCodeLocation(zip_file=base64.b64encode(zbytes).decode()),
-    environment_variables=env,         # <- 原样写回，不增不减
+    environment_variables=env,         # 保留既有键，再应用显式配置
     handler=cur.handler, runtime=cur.runtime,
     timeout=cur.timeout, memory_size=cur.memory_size,
 )
@@ -143,7 +159,7 @@ print("实例当前状态: %s" % st)
 #     一次校验都没做。这恰恰是 v3 那个 bug 能溜过去的同类问题：
 #     报告成功，而成功不成立。
 #     两种选择都给：显式加 --allow-unverified 表示「我知道这次没校验」。
-ALLOW_UNVERIFIED = "--allow-unverified" in sys.argv
+ALLOW_UNVERIFIED = args.allow_unverified
 if st != "Running":
     print("")
     print("✖ 实例不是 Running（当前 %s）—— **无法做调用校验**。" % st)
@@ -242,8 +258,10 @@ if not os.path.exists(_vd):
     sys.exit(1)
 else:
     import subprocess
+    verify_env = dict(os.environ, REGION_ID=REGION, ECS_INSTANCE_ID=IID)
     _r = subprocess.run([sys.executable, _vd],
-                        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        env=verify_env)
     if _r.returncode != 0:
         print("✖ 部署事实回读失败（退出码 %d）—— 见上面列出的具体差异。" % _r.returncode)
         print("  ⚠️ 代码已经更新上去了，但**线上状态与清单不符**。")

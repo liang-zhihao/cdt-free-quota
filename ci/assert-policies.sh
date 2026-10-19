@@ -166,6 +166,7 @@ echo "== 7/7 部署事实：清单 ↔ 文档 ↔ 源码 + 验证器自身的冒
 #    它让人以为已经有了。所以喂给它 13 种漂移，每一种都必须报出对应的那一条。
 #    它不需要凭据、也不需要装 FC SDK（compare() 被抽成了纯函数）。
 "$PY" ci/smoke-verify-deploy.py || fail=1
+"$PY" -m unittest discover -s tests -v || fail=1
 
 echo
 if [ "$fail" -eq 0 ]; then

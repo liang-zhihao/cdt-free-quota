@@ -71,6 +71,7 @@
 │   ├── fc-keeper/index.js    ← 函数计算兜底：实例被意外停机时拉起
 │   ├── deploy-cdtguard.sh    ← 把守护部署进 ECS
 │   ├── deploy-fc.py          ← 部署 FC 代码（含 env 合并与部署后校验）
+│   ├── deployment_config.py  ← 两个部署入口共用的配置读取模块
 │   ├── build-image.sh        ← 自建 1 GB Alpine 磁盘镜像（公共镜像都 ≥20 GB）
 │   ├── import-image.sh       ← 上传 OSS 并导入为 ECS 自定义镜像
 │   ├── provision/            ← 资源创建：模式、依赖顺序、一个完整示例
@@ -256,3 +257,7 @@ sh ci/assert-policies.sh
 代码以 **MIT** 授权，见 [`LICENSE`](LICENSE)。
 ⚠️ 该许可只覆盖软件本身，**不构成对「违反阿里云服务条款使用云服务」的授权** ——
 见 [`DISCLAIMER.md`](DISCLAIMER.md) 第六节。
+
+## 新加坡部署
+
+香港与新加坡均可通过现有部署命令的 `--config` 参数读取同一份 JSON 配置，自动配置守护与 FC 的地域、端点和资源信息。步骤、示例与验收见 [新加坡部署配置](docs/singapore-deployment.md)。

@@ -1,7 +1,7 @@
 #!/bin/sh
 # 部署 cdtguard.py 到 ECS。
 #
-#   用法: deploy-cdtguard.sh <本地 cdtguard.py> <ssh 目标> [--no-restart]
+#   用法: deploy-cdtguard.sh <本地 cdtguard.py> <ssh 目标> [--config JSON] [--dry] [--no-restart]
 #   例:   deploy-cdtguard.sh ./cdtguard.py root@1.2.3.4
 #
 # 沿用本仓库既有的「五步范式」：
@@ -30,10 +30,21 @@
 #    这正是 STEP 4.5 存在的理由：**覆盖之前**先把这些查出来。
 set -e
 
-LOCAL="${1:?用法: deploy-cdtguard.sh <本地 cdtguard.py> <ssh 目标> [--no-restart]}"
+LOCAL="${1:?用法: deploy-cdtguard.sh <本地 cdtguard.py> <ssh 目标> [--config JSON] [--dry] [--no-restart]}"
 TARGET="${2:?缺 ssh 目标，例如 root@1.2.3.4}"
+shift 2
 RESTART=1
-[ "$3" = "--no-restart" ] && RESTART=0
+DRY=0
+CONFIG=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --no-restart) RESTART=0; shift ;;
+    --dry) DRY=1; shift ;;
+    --config) [ "$#" -ge 2 ] || { echo '缺 --config 文件'; exit 1; }
+              CONFIG="$2"; shift 2 ;;
+    *) echo "未知参数: $1"; exit 1 ;;
+  esac
+done
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 CHECKER="$HERE/ci/check-names.py"
@@ -43,6 +54,31 @@ STAMP=$(date +%Y%m%d-%H%M%S)
 say() { printf '\n== %s ==\n' "$1"; }
 
 [ -f "$CHECKER" ] || { echo "X 找不到 $CHECKER"; exit 1; }
+[ -f "$LOCAL" ] || { echo "X 找不到 $LOCAL"; exit 1; }
+if [ -n "$CONFIG" ]; then
+  umask 077
+  TASK_TMP=$(mktemp -d)
+  trap 'rm -rf "$TASK_TMP"' EXIT
+  trap 'exit 1' HUP INT TERM
+  python3 - "$HERE/scripts" "$CONFIG" "$LOCAL" "$TASK_TMP/cdtguard.py" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from deployment_config import load_config, render_guard
+try:
+    config = load_config(sys.argv[2])
+    rendered = render_guard(Path(sys.argv[3]).read_text(encoding="utf-8"), config)
+    Path(sys.argv[4]).write_text(rendered, encoding="utf-8")
+except (ValueError, OSError, SyntaxError):
+    sys.exit("配置生成失败：请检查 JSON 必填项、地域、阈值和源文件；未上传")
+PY
+  LOCAL="$TASK_TMP/cdtguard.py"
+fi
+if [ "$DRY" -eq 1 ]; then
+  python3 "$CHECKER" "$LOCAL"
+  echo '[--dry] 本地校验通过，未连接服务器'
+  exit 0
+fi
 
 say "STEP 0 —— 本地文件"
 [ -f "$LOCAL" ] || { echo "X 找不到 $LOCAL"; exit 1; }
@@ -53,6 +89,7 @@ fi
 
 say "STEP 1 —— 上传脚本与检查器"
 scp -q "$LOCAL"   "$TARGET:$REMOTE.new"
+ssh "$TARGET" "chmod 600 $REMOTE.new"
 scp -q "$CHECKER" "$TARGET:/root/check-names.py"
 echo "  已上传 $REMOTE.new 与 /root/check-names.py"
 
@@ -197,7 +234,7 @@ say "STEP 4.6 —— 门禁通过，覆盖线上文件"
 #    顺序反过来（先覆盖再检查）会让「没填」的结局变成「坏文件已上盘」。
 # ⚠️ `.prev` 是就地的上一版（STEP 3 那份带时间戳的是长期备份）。
 #    首次部署时 $REMOTE 还不存在 —— 用 `|| true` 放行，别让 set -e 把它当失败。
-ssh "$TARGET" "cp -p $REMOTE $REMOTE.prev 2>/dev/null || true; cp $REMOTE.new $REMOTE && python3 -m py_compile $REMOTE && echo '  已覆盖并复检 OK'"
+ssh "$TARGET" "cp -p $REMOTE $REMOTE.prev 2>/dev/null || true; cp $REMOTE.new $REMOTE && chmod 600 $REMOTE && python3 -m py_compile $REMOTE && echo '  已覆盖并复检 OK'"
 
 if [ "$RESTART" -eq 0 ]; then
   say "STEP 5 —— 已指定 --no-restart，到此为止"

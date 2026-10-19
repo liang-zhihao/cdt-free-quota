@@ -1,0 +1,10 @@
+{
+  "REGION_ID": "cn-hongkong",
+  "ZONE": "cn-hongkong-c",
+  "ECS_INSTANCE_ID": "<YOUR_INSTANCE_ID>",
+  "ECS_NAME": "<YOUR_INSTANCE_NAME>",
+  "EIP": "<YOUR_EIP>",
+  "BW_ID": "<YOUR_CBWP_ID>",
+  "OSS_BUCKET": "<YOUR_OSS_BUCKET>",
+  "PUSH_TOKEN": "<YOUR_PUSHPLUS_TOKEN>"
+}
